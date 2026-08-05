@@ -1,0 +1,37 @@
+target-version = "py313"
+line-length = 88
+src = ["src"]
+
+[lint]
+ignore = [
+    "COM812",
+    "CPY001",
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "D105",
+    "D107",
+    "D203",
+    "D213",
+    "E501",
+    "INP001",
+    "ISC001",
+    "S101",
+    "PLR0911",
+    "S311",
+    "ANN401",
+    "BLE001",
+    "PLR2004",
+    "ARG001",
+    "ANN401",
+    "ARG005",
+    "PLR0913",
+    "PLR0917",
+    "FBT001",
+]
+select = ["ALL"]
+
+[lint.flake8-tidy-imports]
+ban-relative-imports = "all"
