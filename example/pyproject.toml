@@ -1,0 +1,11 @@
+[project]
+name = "aiogram-stream-sender-example"
+version = "0.1.0"
+description = "Word-by-word echo bot"
+requires-python = ">=3.14"
+dependencies = [
+    "aiogram-stream-sender",
+]
+
+[tool.uv.sources]
+aiogram-stream-sender = { path = "..", editable = true }
