@@ -52,6 +52,7 @@ class TelegramExecutor:
                 message_thread_id=action.thread_id,
                 text=intent.chunk.text,
                 entities=_entities(intent.chunk),
+                parse_mode=None,
             )
             return Result(ok=True, message_id=message.message_id)
 
@@ -61,6 +62,7 @@ class TelegramExecutor:
                 message_id=intent.message_id,
                 text=intent.chunk.text,
                 entities=_entities(intent.chunk),
+                parse_mode=None,
             )
             return Result(ok=True, message_id=intent.message_id)
 
