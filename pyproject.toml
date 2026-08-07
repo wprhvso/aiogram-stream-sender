@@ -4,14 +4,12 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aiogram-stream-sender"
-version = "0.1.0"
+version = "0.1.1"
 description = "Incremental delivery of streamed text into Telegram messages"
 readme = "README.md"
 requires-python = ">=3.14"
 license = "MIT"
-dependencies = [
-    "aiogram>=3.22",
-]
+dependencies = ["aiogram>=3.22"]
 
 [project.urls]
 Repository = "https://github.com/wprhvso/aiogram-stream-sender"
@@ -41,7 +39,4 @@ branch = true
 source = ["src/aiogram_stream_sender"]
 
 [tool.coverage.report]
-exclude_also = [
-    "if TYPE_CHECKING:",
-    "\\.\\.\\.$",
-]
+exclude_also = ["if TYPE_CHECKING:", "\\.\\.\\.$"]

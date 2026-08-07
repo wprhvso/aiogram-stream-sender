@@ -6,7 +6,7 @@ class Options:
     send_interval: float = 1.0
     edit_interval: float = 1.0
     delete_interval: float = 1.0
-    action_interval: float = 4.0
+    action_interval: float = 5.0
     typing_enabled: bool = True
     backoff_base: float = 1.0
     backoff_max: float = 30.0
