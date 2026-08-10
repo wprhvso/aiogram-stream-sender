@@ -1,5 +1,7 @@
 import logging
 
+import pytest
+
 from aiogram_stream_sender.events import ChatHold, Event, MessageFailed, emit
 
 
@@ -14,7 +16,7 @@ def test_emit_delivers_event() -> None:
     assert seen == [event]
 
 
-def test_emit_swallows_sink_errors(caplog: logging.LogCaptureFixture) -> None:
+def test_emit_swallows_sink_errors(caplog: pytest.LogCaptureFixture) -> None:
     def broken(event: Event) -> None:
         raise RuntimeError(str(event))
 
