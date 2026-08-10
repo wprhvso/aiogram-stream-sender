@@ -14,7 +14,7 @@ def test_hash_excluded_from_equality() -> None:
 
 
 def test_from_mapping_copies_entities() -> None:
-    source = {"text": "a", "entities": [{"type": "code"}]}
-    chunk = Chunk.from_mapping(source)
-    source["entities"][0]["type"] = "bold"
+    entities = [{"type": "code"}]
+    chunk = Chunk.from_mapping({"text": "a", "entities": entities})
+    entities[0]["type"] = "bold"
     assert chunk.entities[0]["type"] == "code"

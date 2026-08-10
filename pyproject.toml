@@ -25,18 +25,3 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/aiogram_stream_sender"]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["."]
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
-addopts = "--strict-markers --strict-config -ra"
-xfail_strict = true
-filterwarnings = ["error"]
-
-[tool.coverage.run]
-branch = true
-source = ["src/aiogram_stream_sender"]
-
-[tool.coverage.report]
-exclude_also = ["if TYPE_CHECKING:", "\\.\\.\\.$"]
