@@ -4,6 +4,7 @@ from typing import Literal
 from aiogram_stream_sender.chunk import Chunk
 from aiogram_stream_sender.message.intent import (
     DeleteIntent,
+    DropIntent,
     EditIntent,
     Intent,
     SendIntent,
@@ -16,9 +17,11 @@ MessageState = Literal["pending", "live", "dead"]
 class SenderMessage:
     desired: Chunk | None = None
     delivered_hash: str | None = None
+    delivered_key: str | None = None
     message_id: int | None = None
     attempts: int = 0
     state: MessageState = "pending"
+    in_flight: bool = False
 
     def set_desired(self, chunk: Chunk) -> None:
         if self.state == "dead":
@@ -39,6 +42,8 @@ class SenderMessage:
             return DeleteIntent(message_id=self.message_id)
         if self.message_id is None:
             return SendIntent(chunk=self.desired)
+        if self.desired.key != self.delivered_key:
+            return DropIntent(message_id=self.message_id)
         if self.desired.content_hash != self.delivered_hash:
             return EditIntent(message_id=self.message_id, chunk=self.desired)
         return None
@@ -50,9 +55,16 @@ class SenderMessage:
                 return
             self.message_id = message_id
             self.delivered_hash = intent.chunk.content_hash
+            self.delivered_key = intent.chunk.key
             self.state = "live"
         elif isinstance(intent, EditIntent):
             self.delivered_hash = intent.chunk.content_hash
+            self.delivered_key = intent.chunk.key
+        elif isinstance(intent, DropIntent):
+            self.message_id = None
+            self.delivered_hash = None
+            self.delivered_key = None
+            self.state = "pending"
         elif isinstance(intent, DeleteIntent):
             self.state = "dead"
 

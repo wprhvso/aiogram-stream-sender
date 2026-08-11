@@ -14,6 +14,7 @@ StreamState = Literal["active", "finished", "dead"]
 class SenderStream:
     stream_id: int
     thread_id: int | None = None
+    typing: bool = True
     messages: list[SenderMessage] = field(default_factory=list)
     is_final: bool = False
     state: StreamState = "active"
@@ -35,8 +36,13 @@ class SenderStream:
         self.messages = self.messages[: len(chunks)] + [
             message
             for message in tail
-            if message.message_id is not None and message.state != "dead"
+            if (message.message_id is not None or message.in_flight)
+            and message.state != "dead"
         ]
+
+    def mark_in_flight(self, index: int, *, value: bool) -> None:
+        if 0 <= index < len(self.messages):
+            self.messages[index].in_flight = value
 
     def finalize(self) -> None:
         self.is_final = True
@@ -82,6 +88,8 @@ class SenderStream:
 
     def _refresh(self) -> None:
         if self.state != "active":
+            return
+        if any(message.in_flight for message in self.messages):
             return
         if self.is_final and self.pending() is None:
             self.state = "finished"

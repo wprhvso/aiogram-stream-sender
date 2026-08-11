@@ -20,12 +20,15 @@ class LiveStream:
         stream_id: int,
         *,
         raise_on_failure: bool,
+        typing: bool = True,
     ) -> None:
         self._runtime: Final = runtime
         self._worker: Final = worker
         self._stream_id: Final = stream_id
         self._raise_on_failure: Final = raise_on_failure
-        self._settled: Final = worker.register(stream_id, runtime.thread_of(stream_id))
+        self._settled: Final = worker.register(
+            stream_id, runtime.thread_of(stream_id), typing=typing
+        )
         self._closed = False
 
     async def __aenter__(self) -> Self:
@@ -79,5 +82,7 @@ class ScopedSender:
         self._chat_id: Final = chat_id
         self._thread_id: Final = thread_id
 
-    def stream(self) -> LiveStream:
-        return self._runtime.open_stream(self._bot, self._chat_id, self._thread_id)
+    def stream(self, *, typing: bool = True) -> LiveStream:
+        return self._runtime.open_stream(
+            self._bot, self._chat_id, self._thread_id, typing=typing
+        )

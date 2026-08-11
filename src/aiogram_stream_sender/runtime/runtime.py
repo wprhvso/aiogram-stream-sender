@@ -45,7 +45,14 @@ class SenderRuntime:
     def thread_of(self, stream_id: int) -> int | None:
         return self._threads.get(stream_id)
 
-    def open_stream(self, bot: Bot, chat_id: int, thread_id: int | None) -> LiveStream:
+    def open_stream(
+        self,
+        bot: Bot,
+        chat_id: int,
+        thread_id: int | None,
+        *,
+        typing: bool = True,
+    ) -> LiveStream:
         scope: Scope = (bot.id, chat_id)
         worker = self._workers.get(scope)
         if worker is None or worker.status != "running":
@@ -67,6 +74,7 @@ class SenderRuntime:
             worker,
             stream_id,
             raise_on_failure=self._options.raise_on_failure,
+            typing=typing,
         )
 
     def prune(self) -> None:

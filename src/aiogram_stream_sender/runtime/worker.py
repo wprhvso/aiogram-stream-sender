@@ -36,8 +36,10 @@ class MachineWorker:
     def start(self) -> None:
         self.task = asyncio.create_task(self.run())
 
-    def register(self, stream_id: int, thread_id: int | None) -> asyncio.Event:
-        self._machine.add_stream(stream_id, thread_id)
+    def register(
+        self, stream_id: int, thread_id: int | None, *, typing: bool = True
+    ) -> asyncio.Event:
+        self._machine.add_stream(stream_id, thread_id, typing=typing)
         event = asyncio.Event()
         self._waiters[stream_id] = event
         return event
