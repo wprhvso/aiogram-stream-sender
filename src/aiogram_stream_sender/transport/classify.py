@@ -19,6 +19,9 @@ _MESSAGE_DEAD = (
     "message is too long",
     "can't parse entities",
     "text must be non-empty",
+    "button_data_invalid",
+    "button_url_invalid",
+    "reply_markup_invalid",
 )
 
 _STREAM_DEAD = (

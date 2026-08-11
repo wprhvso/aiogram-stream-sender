@@ -15,6 +15,7 @@ from aiogram_stream_sender.message.intent import (
     ActionIntent,
     ActionKind,
     DeleteIntent,
+    DropIntent,
     EditIntent,
     Intent,
     SendIntent,
@@ -147,3 +148,91 @@ async def test_forbidden_kills_stream() -> None:
     )
 
     assert result.failure is Failure.STREAM_DEAD
+
+
+_MARKUP = {"inline_keyboard": [[{"text": "Yes", "callback_data": "long:send"}]]}
+
+
+async def test_drop_deletes_like_a_delete() -> None:
+    bot = RecordingBot()
+    executor = TelegramExecutor(bot, 10)
+
+    result = await executor.execute(
+        _action(DropIntent(message_id=42), ActionKind.DELETE)
+    )
+
+    assert bot.calls[0][0] == "delete_message"
+    assert result.message_id == 42
+
+
+async def test_send_carries_markup_preview_and_reply() -> None:
+    bot = RecordingBot()
+    executor = TelegramExecutor(bot, 10)
+    chunk = Chunk(
+        text="hi",
+        reply_markup=_MARKUP,
+        link_preview={"is_disabled": True},
+        reply_to=7,
+    )
+
+    _result = await executor.execute(_action(SendIntent(chunk=chunk), ActionKind.SEND))
+
+    _name, kwargs = bot.calls[0]
+    assert kwargs["reply_markup"].inline_keyboard[0][0].text == "Yes"
+    assert kwargs["link_preview_options"].is_disabled
+    assert kwargs["reply_parameters"].message_id == 7
+    assert kwargs["reply_parameters"].allow_sending_without_reply
+
+
+async def test_plain_chunk_leaves_the_extras_empty() -> None:
+    bot = RecordingBot()
+    executor = TelegramExecutor(bot, 10)
+
+    _result = await executor.execute(
+        _action(SendIntent(chunk=Chunk(text="hi")), ActionKind.SEND)
+    )
+
+    _name, kwargs = bot.calls[0]
+    assert kwargs["reply_markup"] is None
+    assert kwargs["link_preview_options"] is None
+    assert kwargs["reply_parameters"] is None
+    assert kwargs["parse_mode"] is None
+    assert kwargs["entities"] == []
+
+
+async def test_parse_mode_replaces_entities() -> None:
+    bot = RecordingBot()
+    executor = TelegramExecutor(bot, 10)
+    chunk = Chunk(
+        text="<b>hi</b>",
+        entities=({"type": "bold", "offset": 0, "length": 2},),
+        parse_mode="HTML",
+    )
+
+    _result = await executor.execute(_action(SendIntent(chunk=chunk), ActionKind.SEND))
+
+    _name, kwargs = bot.calls[0]
+    assert kwargs["parse_mode"] == "HTML"
+    assert kwargs["entities"] is None
+
+
+async def test_edit_clears_a_markup_that_is_gone() -> None:
+    bot = RecordingBot()
+    executor = TelegramExecutor(bot, 10)
+    intent = EditIntent(message_id=42, chunk=Chunk(text="hi"))
+
+    _result = await executor.execute(_action(intent, ActionKind.EDIT))
+
+    _name, kwargs = bot.calls[0]
+    assert kwargs["reply_markup"] is None
+
+
+async def test_edit_keeps_the_markup_it_is_given() -> None:
+    bot = RecordingBot()
+    executor = TelegramExecutor(bot, 10)
+    intent = EditIntent(message_id=42, chunk=Chunk(text="hi", reply_markup=_MARKUP))
+
+    _result = await executor.execute(_action(intent, ActionKind.EDIT))
+
+    _name, kwargs = bot.calls[0]
+    assert kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "long:send"

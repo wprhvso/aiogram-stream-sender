@@ -41,9 +41,11 @@ class SenderMachine:
         self._done_at: dict[int, float] = {}
         self._idle_since: float | None = None
 
-    def add_stream(self, stream_id: int, thread_id: int | None) -> None:
+    def add_stream(
+        self, stream_id: int, thread_id: int | None, *, typing: bool = True
+    ) -> None:
         self._streams[stream_id] = SenderStream(
-            stream_id=stream_id, thread_id=thread_id
+            stream_id=stream_id, thread_id=thread_id, typing=typing
         )
         self._idle_since = None
 
@@ -82,10 +84,17 @@ class SenderMachine:
             self._streams, self._timings, self._retry_at, self._options, now
         )
         if action is not None:
+            stream = self._streams.get(action.stream_id)
+            if stream is not None:
+                stream.mark_in_flight(action.index, value=True)
             return action, deadline
         return None, min(deadline, self._ttl_deadline())
 
     def apply(self, action: ScopedAction, result: Result, now: float) -> None:
+        stream = self._streams.get(action.stream_id)
+        if stream is not None:
+            stream.mark_in_flight(action.index, value=False)
+
         if result.retry_after is not None:
             self._timings.hold_until = now + result.retry_after
             emit(
@@ -95,11 +104,7 @@ class SenderMachine:
             return
 
         self._timings.last_at[action.kind] = now
-        if action.kind is ActionKind.ACTION:
-            return
-
-        stream = self._streams.get(action.stream_id)
-        if stream is None:
+        if action.kind is ActionKind.ACTION or stream is None:
             return
         address = (action.stream_id, action.index)
 

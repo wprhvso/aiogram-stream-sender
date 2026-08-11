@@ -93,3 +93,34 @@ def test_typing_fills_throttle_gap() -> None:
     action, _deadline = plan({1: _stream(1, ["a"])}, timings, {}, options, 5.0)
     assert action is not None
     assert action.kind is ActionKind.ACTION
+
+
+def _deliver(stream: SenderStream, message_id: int) -> None:
+    found = stream.pending()
+    assert found is not None
+    stream.apply_success(found[0], found[1], message_id)
+
+
+def test_stream_can_opt_out_of_typing() -> None:
+    options = Options()
+    stream = SenderStream(stream_id=1, typing=False)
+    stream.update([Chunk(text="a")])
+    _deliver(stream, 10)
+
+    action, deadline = plan({1: stream}, ChatTimings(), {}, options, 0.0)
+
+    assert action is None
+    assert math.isinf(deadline)
+
+
+def test_a_silent_stream_does_not_hide_a_talkative_one() -> None:
+    options = Options()
+    silent = SenderStream(stream_id=1, typing=False)
+    talkative = _stream(2, ["a"])
+    _deliver(talkative, 10)
+
+    action, _deadline = plan({1: silent, 2: talkative}, ChatTimings(), {}, options, 0.0)
+
+    assert action is not None
+    assert action.kind is ActionKind.ACTION
+    assert action.stream_id == 2

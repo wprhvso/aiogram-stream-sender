@@ -28,11 +28,16 @@ class DeleteIntent:
 
 
 @dataclass(frozen=True, slots=True)
+class DropIntent:
+    message_id: int
+
+
+@dataclass(frozen=True, slots=True)
 class ActionIntent:
     pass
 
 
-Intent = SendIntent | EditIntent | DeleteIntent | ActionIntent
+Intent = SendIntent | EditIntent | DeleteIntent | DropIntent | ActionIntent
 
 
 def kind_of(intent: Intent) -> ActionKind:
@@ -40,6 +45,6 @@ def kind_of(intent: Intent) -> ActionKind:
         return ActionKind.SEND
     if isinstance(intent, EditIntent):
         return ActionKind.EDIT
-    if isinstance(intent, DeleteIntent):
+    if isinstance(intent, (DeleteIntent, DropIntent)):
         return ActionKind.DELETE
     return ActionKind.ACTION

@@ -45,7 +45,7 @@ def plan(
         stream = streams[stream_id]
         if stream.is_done:
             continue
-        if not stream.is_final and typing_stream is None:
+        if stream.typing and not stream.is_final and typing_stream is None:
             typing_stream = stream
         found = stream.pending()
         if found is None:
