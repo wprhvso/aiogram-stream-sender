@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import itertools
+import logging
 from collections.abc import Callable
 from typing import Final
 
@@ -14,6 +15,8 @@ from aiogram_stream_sender.runtime.clock import Clock, MonotonicClock
 from aiogram_stream_sender.runtime.scoped import LiveStream, ScopedSender
 from aiogram_stream_sender.runtime.worker import MachineWorker
 from aiogram_stream_sender.transport.executor import Executor, TelegramExecutor
+
+log = logging.getLogger(__name__)
 
 Scope = tuple[int, int]
 ExecutorFactory = Callable[[Bot, int], Executor]
@@ -91,9 +94,15 @@ class SenderRuntime:
             worker.task for worker in self._workers.values() if worker.task is not None
         ]
         if tasks:
-            _done, pending = await asyncio.wait(
+            done, pending = await asyncio.wait(
                 tasks, timeout=self._options.shutdown_timeout
             )
+            for task in done:
+                # asyncio.wait leaves results unretrieved, so a worker that
+                # crashed would only ever surface as a GC warning.
+                with contextlib.suppress(asyncio.CancelledError):
+                    if (error := task.exception()) is not None:
+                        log.error("sender worker crashed", exc_info=error)
             for task in pending:
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError, Exception):

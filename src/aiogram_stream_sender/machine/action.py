@@ -20,3 +20,6 @@ class Result:
     failure: Failure | None = None
     reason: str = ""
     retry_after: float | None = None
+    # Kept so a caller can report the failure with its traceback; str(error)
+    # alone is not enough to record an exception anywhere downstream.
+    error: BaseException | None = None

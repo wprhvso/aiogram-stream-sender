@@ -1,8 +1,10 @@
 import asyncio
+import contextvars
 import logging
 from typing import Final, Literal
 
 from aiogram_stream_sender.chunk import Chunk
+from aiogram_stream_sender.machine.action import Result, ScopedAction
 from aiogram_stream_sender.machine.machine import SenderMachine
 from aiogram_stream_sender.options import Options
 from aiogram_stream_sender.runtime.clock import Clock
@@ -29,27 +31,66 @@ class MachineWorker:
         self._wakeup: Final = asyncio.Event()
         self._waiters: Final[dict[int, asyncio.Event]] = {}
         self._outcomes: Final[dict[int, Outcome]] = {}
+        self._contexts: Final[dict[int, contextvars.Context]] = {}
         self._closing = False
         self.status: WorkerStatus = "running"
         self.task: asyncio.Task[None] | None = None
 
     def start(self) -> None:
-        self.task = asyncio.create_task(self.run())
+        # One worker serves a chat for the lifetime of the process. Inheriting
+        # the context of whichever caller opened the first stream would pin
+        # every later send in that chat to that one caller.
+        self.task = asyncio.create_task(self.run(), context=contextvars.Context())
 
     def register(
-        self, stream_id: int, thread_id: int | None, *, typing: bool = True
+        self,
+        stream_id: int,
+        thread_id: int | None,
+        *,
+        typing: bool = True,
+        context: contextvars.Context | None = None,
     ) -> asyncio.Event:
         self._machine.add_stream(stream_id, thread_id, typing=typing)
         event = asyncio.Event()
         self._waiters[stream_id] = event
+        if context is not None:
+            self._contexts[stream_id] = context
         return event
 
     def unregister(self, stream_id: int) -> None:
         self._waiters.pop(stream_id, None)
         self._outcomes.pop(stream_id, None)
+        self._contexts.pop(stream_id, None)
 
     def outcome(self, stream_id: int) -> Outcome:
         return self._outcomes.get(stream_id) or self._machine.outcome(stream_id)
+
+    async def settled(self, stream_id: int) -> None:
+        """Wait for a stream to settle, or for the worker to stop trying.
+
+        A worker that is cancelled before it ever runs cannot settle anyone, and
+        the event would never be set — so the death of the worker has to count
+        as an answer, otherwise the caller waits for the life of the process.
+        """
+        event = self._waiters.get(stream_id)
+        if event is None:
+            return
+        task = self.task
+        if task is None or task.done():
+            if not event.is_set():
+                self._machine.kill_all("worker stopped")
+                self._settle()
+            return
+
+        waiter = asyncio.ensure_future(event.wait())
+        try:
+            _ = await asyncio.wait({waiter, task}, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            _ = waiter.cancel()
+
+        if not event.is_set():
+            self._machine.kill_all("worker stopped")
+            self._settle()
 
     def update(self, stream_id: int, chunks: tuple[Chunk, ...]) -> None:
         self._machine.update(stream_id, chunks)
@@ -64,6 +105,31 @@ class MachineWorker:
         self._machine.finalize_all()
         self._wakeup.set()
 
+    async def _execute(self, action: ScopedAction) -> Result:
+        # Run the call in the context of the stream it belongs to, so the work
+        # is attributed to the caller that asked for it rather than to the
+        # worker, which belongs to no caller in particular.
+        context = self._contexts.get(action.stream_id)
+        if context is None:
+            return await self._executor.execute(action)
+
+        task = asyncio.create_task(self._executor.execute(action), context=context)
+        try:
+            return await task
+        except asyncio.CancelledError:
+            _ = task.cancel()
+            raise
+
+    def _apply(self, action: ScopedAction, result: Result) -> None:
+        # Applying a result is what emits events, so it belongs to the stream
+        # just as much as the call itself does.
+        context = self._contexts.get(action.stream_id)
+        now = self._clock.now()
+        if context is None:
+            self._machine.apply(action, result, now)
+            return
+        context.run(self._machine.apply, action, result, now)
+
     async def run(self) -> None:
         try:
             while True:
@@ -72,8 +138,8 @@ class MachineWorker:
                 action, deadline = self._machine.plan(now)
 
                 if action is not None:
-                    result = await self._executor.execute(action)
-                    self._machine.apply(action, result, self._clock.now())
+                    result = await self._execute(action)
+                    self._apply(action, result)
                     self._settle()
                     continue
 
@@ -88,6 +154,11 @@ class MachineWorker:
 
                 await self._sleep(deadline)
         except asyncio.CancelledError:
+            # Waiters block on finish() with no timeout, so leaving them unset
+            # strands the caller for good.
+            self._machine.kill_all("worker cancelled")
+            self._settle()
+            self.status = "stopping"
             raise
         except BaseException:
             log.exception("worker crashed")

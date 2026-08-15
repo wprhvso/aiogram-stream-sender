@@ -66,7 +66,11 @@ class TelegramExecutor:
             if retry_after is None:
                 log.warning("action failed: %r (%s)", action, reason)
             return Result(
-                ok=False, failure=failure, reason=reason, retry_after=retry_after
+                ok=False,
+                failure=failure,
+                reason=reason,
+                retry_after=retry_after,
+                error=error,
             )
 
     async def _dispatch(self, action: ScopedAction) -> Result:
