@@ -2,6 +2,7 @@ import asyncio
 import contextvars
 
 from aiogram.exceptions import TelegramBadRequest
+from tests.conftest import FakeBot, FakeClock, FakeExecutor
 
 from aiogram_stream_sender.chunk import Chunk
 from aiogram_stream_sender.machine.action import Result, ScopedAction
@@ -9,7 +10,6 @@ from aiogram_stream_sender.message.intent import ActionKind, SendIntent
 from aiogram_stream_sender.options import Options
 from aiogram_stream_sender.runtime.runtime import SenderRuntime
 from aiogram_stream_sender.transport.executor import TelegramExecutor
-from tests.conftest import FakeClock, FakeExecutor
 
 DEADLINE = 5.0
 
@@ -26,11 +26,6 @@ class ContextAwareExecutor(FakeExecutor):
     async def execute(self, action: ScopedAction) -> Result:
         self.contexts.append(origin.get())
         return await super().execute(action)
-
-
-class FakeBot:
-    def __init__(self, bot_id: int = 1) -> None:
-        self.id = bot_id
 
 
 def build() -> tuple[SenderRuntime, ContextAwareExecutor]:
