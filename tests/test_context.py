@@ -116,15 +116,19 @@ async def test_failed_actions_keep_the_exception_object() -> None:
 
 
 async def test_cancelling_the_worker_releases_a_waiting_finish() -> None:
-    # finish() waits on an event with no timeout, so a cancelled worker used to
-    # strand the caller for the life of the process.
-    runtime, _executor = build()
+    # finish() waits on an event with no timeout, so a worker that dies without
+    # settling used to strand the caller for the life of the process.
+    class Cancelling:
+        async def execute(self, _action: ScopedAction) -> Result:
+            raise asyncio.CancelledError
+
+    runtime = SenderRuntime(
+        Options(send_interval=0.0, edit_interval=0.0, raise_on_failure=False),
+        clock=FakeClock(),
+        executor_factory=lambda _bot, _chat: Cancelling(),
+    )
     stream = runtime.scoped(FakeBot(), 10, None).stream(typing=False)  # pyright: ignore[reportArgumentType]
     stream.update([{"text": "hi"}])
-
-    worker = next(iter(runtime._workers.values()))  # pyright: ignore[reportPrivateUsage]  # noqa: SLF001
-    assert worker.task is not None
-    _ = worker.task.cancel()
 
     async with asyncio.timeout(DEADLINE):
         _ = await stream.finish(raise_on_failure=False)
