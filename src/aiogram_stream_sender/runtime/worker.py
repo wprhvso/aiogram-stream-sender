@@ -120,6 +120,16 @@ class MachineWorker:
             _ = task.cancel()
             raise
 
+    def _apply(self, action: ScopedAction, result: Result) -> None:
+        # Applying a result is what emits events, so it belongs to the stream
+        # just as much as the call itself does.
+        context = self._contexts.get(action.stream_id)
+        now = self._clock.now()
+        if context is None:
+            self._machine.apply(action, result, now)
+            return
+        context.run(self._machine.apply, action, result, now)
+
     async def run(self) -> None:
         try:
             while True:
@@ -129,7 +139,7 @@ class MachineWorker:
 
                 if action is not None:
                     result = await self._execute(action)
-                    self._machine.apply(action, result, self._clock.now())
+                    self._apply(action, result)
                     self._settle()
                     continue
 
