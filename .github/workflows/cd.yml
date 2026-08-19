@@ -19,6 +19,8 @@ jobs:
         with:
           checks: ${{ matrix.check }}
           coverage-fail-under: "95"
+          pytest-with: "pytest pytest-asyncio pytest-timeout"
+          pytest-args: "--timeout=30"
 
   version:
     runs-on: pool
