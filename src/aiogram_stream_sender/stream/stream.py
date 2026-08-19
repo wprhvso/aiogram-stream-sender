@@ -33,11 +33,12 @@ class SenderStream:
         tail = self.messages[len(chunks) :]
         for message in tail:
             message.mark_for_deletion()
+        if any(message.in_flight for message in tail):
+            return
         self.messages = self.messages[: len(chunks)] + [
             message
             for message in tail
-            if (message.message_id is not None or message.in_flight)
-            and message.state != "dead"
+            if message.message_id is not None and message.state != "dead"
         ]
 
     def mark_in_flight(self, index: int, *, value: bool) -> None:

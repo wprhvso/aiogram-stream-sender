@@ -31,13 +31,14 @@ def plan(
     streams: Mapping[int, SenderStream],
     timings: ChatTimings,
     retry_at: Mapping[tuple[int, int], float],
+    served: Mapping[int, int],
     options: Options,
     now: float,
 ) -> tuple[ScopedAction | None, float]:
     if now < timings.hold_until:
         return None, timings.hold_until
 
-    best_key: tuple[float, int, int] | None = None
+    best_key: tuple[float, int, int, int] | None = None
     best_action: ScopedAction | None = None
     typing_stream: SenderStream | None = None
 
@@ -56,7 +57,12 @@ def plan(
             _next_at(timings, options, kind),
             retry_at.get((stream_id, index), -math.inf),
         )
-        key = (ready, 0 if stream.is_final else 1, stream_id)
+        key = (
+            ready,
+            0 if stream.is_final else 1,
+            served.get(stream_id, 0),
+            stream_id,
+        )
         if best_key is None or key < best_key:
             best_key = key
             best_action = ScopedAction(

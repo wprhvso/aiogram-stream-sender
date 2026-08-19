@@ -2,7 +2,6 @@ from aiogram.exceptions import (
     TelegramAPIError,
     TelegramBadRequest,
     TelegramForbiddenError,
-    TelegramNetworkError,
     TelegramRetryAfter,
 )
 
@@ -47,16 +46,15 @@ def classify(error: Exception) -> tuple[Failure, float | None, str]:
     if isinstance(error, TelegramForbiddenError):
         return Failure.STREAM_DEAD, None, text
 
-    if any(marker in lowered for marker in _STREAM_DEAD):
+    if isinstance(error, TelegramAPIError) and any(
+        marker in lowered for marker in _STREAM_DEAD
+    ):
         return Failure.STREAM_DEAD, None, text
 
     if isinstance(error, TelegramBadRequest) and any(
         marker in lowered for marker in _MESSAGE_DEAD
     ):
         return Failure.MESSAGE_DEAD, None, text
-
-    if isinstance(error, (TelegramNetworkError, TelegramAPIError)):
-        return Failure.TRANSIENT, None, text
 
     return Failure.TRANSIENT, None, text
 

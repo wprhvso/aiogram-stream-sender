@@ -36,8 +36,23 @@ class MachineWorker:
         self.status: WorkerStatus = "running"
         self.task: asyncio.Task[None] | None = None
 
+    @property
+    def is_alive(self) -> bool:
+        return (
+            self.status == "running" and self.task is not None and not self.task.done()
+        )
+
     def start(self) -> None:
-        self.task = asyncio.create_task(self.run(), context=contextvars.Context())
+        task = asyncio.create_task(self.run(), context=contextvars.Context())
+        task.add_done_callback(self._retrieve)
+        self.task = task
+
+    @staticmethod
+    def _retrieve(task: asyncio.Task[None]) -> None:
+        if task.cancelled():
+            return
+        if (error := task.exception()) is not None:
+            log.error("sender worker stopped", exc_info=error)
 
     def register(
         self,
@@ -69,7 +84,7 @@ class MachineWorker:
         task = self.task
         if task is None or task.done():
             if not event.is_set():
-                self._machine.kill_all("worker stopped")
+                self._machine.kill(stream_id, "worker stopped")
                 self._settle()
             return
 
@@ -78,9 +93,10 @@ class MachineWorker:
             _ = await asyncio.wait({waiter, task}, return_when=asyncio.FIRST_COMPLETED)
         finally:
             _ = waiter.cancel()
+            _ = await asyncio.gather(waiter, return_exceptions=True)
 
         if not event.is_set():
-            self._machine.kill_all("worker stopped")
+            self._machine.kill(stream_id, "worker stopped")
             self._settle()
 
     def update(self, stream_id: int, chunks: tuple[Chunk, ...]) -> None:
@@ -165,7 +181,12 @@ class MachineWorker:
         sleeper = asyncio.create_task(self._clock.sleep_until(deadline))
         waker = asyncio.create_task(self._wakeup.wait())
         try:
-            await asyncio.wait({sleeper, waker}, return_when=asyncio.FIRST_COMPLETED)
+            done, _pending = await asyncio.wait(
+                {sleeper, waker}, return_when=asyncio.FIRST_COMPLETED
+            )
+            if sleeper in done and not sleeper.cancelled():
+                sleeper.result()
         finally:
-            sleeper.cancel()
-            waker.cancel()
+            _ = sleeper.cancel()
+            _ = waker.cancel()
+            _ = await asyncio.gather(sleeper, waker, return_exceptions=True)

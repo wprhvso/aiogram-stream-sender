@@ -15,7 +15,7 @@ from aiogram_stream_sender.events import (
 from aiogram_stream_sender.machine.action import Result, ScopedAction
 from aiogram_stream_sender.machine.scheduler import plan
 from aiogram_stream_sender.machine.timings import ChatTimings
-from aiogram_stream_sender.message.intent import ActionKind
+from aiogram_stream_sender.message.intent import ActionKind, SendIntent
 from aiogram_stream_sender.options import Options
 from aiogram_stream_sender.stream.stream import SenderStream
 
@@ -39,6 +39,8 @@ class SenderMachine:
         self._streams: dict[int, SenderStream] = {}
         self._retry_at: dict[tuple[int, int], float] = {}
         self._done_at: dict[int, float] = {}
+        self._served: dict[int, int] = {}
+        self._turn = 0
         self._idle_since: float | None = None
 
     def add_stream(
@@ -51,8 +53,17 @@ class SenderMachine:
 
     def update(self, stream_id: int, chunks: Sequence[Chunk]) -> None:
         stream = self._streams.get(stream_id)
-        if stream is not None:
-            stream.update(chunks)
+        if stream is None:
+            return
+        stream.update(chunks)
+        size = len(stream.messages)
+        stale = [
+            address
+            for address in self._retry_at
+            if address[0] == stream_id and address[1] >= size
+        ]
+        for address in stale:
+            self._retry_at.pop(address, None)
 
     def finalize(self, stream_id: int) -> None:
         stream = self._streams.get(stream_id)
@@ -81,9 +92,16 @@ class SenderMachine:
         for stream in self._streams.values():
             self._note_done(stream, now)
         action, deadline = plan(
-            self._streams, self._timings, self._retry_at, self._options, now
+            self._streams,
+            self._timings,
+            self._retry_at,
+            self._served,
+            self._options,
+            now,
         )
         if action is not None:
+            self._turn += 1
+            self._served[action.stream_id] = self._turn
             stream = self._streams.get(action.stream_id)
             if stream is not None:
                 stream.mark_in_flight(action.index, value=True)
@@ -108,7 +126,7 @@ class SenderMachine:
             return
         address = (action.stream_id, action.index)
 
-        if result.ok:
+        if result.ok and not self._is_void_send(action, result):
             self._retry_at.pop(address, None)
             stream.apply_success(action.index, action.intent, result.message_id)
             self._note_done(stream, now)
@@ -173,6 +191,7 @@ class SenderMachine:
         for stream_id in expired:
             self._streams.pop(stream_id, None)
             self._done_at.pop(stream_id, None)
+            self._served.pop(stream_id, None)
             for address in [key for key in self._retry_at if key[0] == stream_id]:
                 self._retry_at.pop(address, None)
         if not self._streams:
@@ -188,6 +207,13 @@ class SenderMachine:
             and now - self._idle_since >= self._options.machine_ttl
         )
 
+    def kill(self, stream_id: int, reason: str) -> None:
+        stream = self._streams.get(stream_id)
+        if stream is None or stream.is_done:
+            return
+        stream.kill(reason)
+        emit(self._sink, StreamFailed(self.bot_id, self.chat_id, stream_id, reason))
+
     def kill_all(self, reason: str) -> None:
         for stream in self._streams.values():
             if not stream.is_done:
@@ -196,6 +222,9 @@ class SenderMachine:
                     self._sink,
                     StreamFailed(self.bot_id, self.chat_id, stream.stream_id, reason),
                 )
+
+    def _is_void_send(self, action: ScopedAction, result: Result) -> bool:
+        return isinstance(action.intent, SendIntent) and result.message_id is None
 
     def _note_done(self, stream: SenderStream, now: float) -> None:
         if stream.is_done and stream.stream_id not in self._done_at:

@@ -69,14 +69,14 @@ def test_nothing_becomes_ready_before_the_deadline(
     timings = ChatTimings(last_at=dict(last_at), hold_until=hold_until)
     options = _options(typing_enabled=typing_enabled, interval=interval)
 
-    action, deadline = plan(streams, timings, {}, options, now)
+    action, deadline = plan(streams, timings, {}, {}, options, now)
     if action is not None or not math.isfinite(deadline) or deadline <= now:
         return
 
     midpoint = now + (deadline - now) / 2
     if midpoint <= now or midpoint >= deadline:
         return
-    assert plan(streams, timings, {}, options, midpoint)[0] is None
+    assert plan(streams, timings, {}, {}, options, midpoint)[0] is None
 
 
 @settings(deadline=None, max_examples=200)
@@ -98,11 +98,11 @@ def test_finite_deadline_always_yields_an_action(
     timings = ChatTimings(last_at=dict(last_at))
     options = _options(typing_enabled=typing_enabled, interval=interval)
 
-    action, deadline = plan(streams, timings, {}, options, now)
+    action, deadline = plan(streams, timings, {}, {}, options, now)
     if action is not None or not math.isfinite(deadline):
         return
 
-    assert plan(streams, timings, {}, options, deadline)[0] is not None
+    assert plan(streams, timings, {}, {}, options, deadline)[0] is not None
 
 
 @settings(deadline=None, max_examples=100)
@@ -124,7 +124,7 @@ def test_hold_suppresses_every_stream(
     timings = ChatTimings(hold_until=hold_until)
     options = _options(typing_enabled=True, interval=interval)
 
-    action, deadline = plan(streams, timings, {}, options, now)
+    action, deadline = plan(streams, timings, {}, {}, options, now)
 
     assert action is None
     assert deadline == hold_until

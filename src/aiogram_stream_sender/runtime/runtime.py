@@ -40,13 +40,9 @@ class SenderRuntime:
         self._timings: Final = TimingsCache(self._options.timings_capacity)
         self._workers: dict[Scope, MachineWorker] = {}
         self._ids: Final = itertools.count(1)
-        self._threads: dict[int, int | None] = {}
 
     def scoped(self, bot: Bot, chat_id: int, thread_id: int | None) -> ScopedSender:
         return ScopedSender(self, bot, chat_id, thread_id)
-
-    def thread_of(self, stream_id: int) -> int | None:
-        return self._threads.get(stream_id)
 
     def open_stream(
         self,
@@ -56,9 +52,10 @@ class SenderRuntime:
         *,
         typing: bool = True,
     ) -> LiveStream:
+        self.prune()
         scope: Scope = (bot.id, chat_id)
         worker = self._workers.get(scope)
-        if worker is None or worker.status != "running":
+        if worker is None or not worker.is_alive:
             machine = SenderMachine(
                 bot_id=bot.id,
                 chat_id=chat_id,
@@ -70,21 +67,17 @@ class SenderRuntime:
             worker = MachineWorker(machine, executor, self._clock, self._options)
             self._workers[scope] = worker
             worker.start()
-        stream_id = next(self._ids)
-        self._threads[stream_id] = thread_id
         return LiveStream(
-            self,
             worker,
-            stream_id,
+            next(self._ids),
+            thread_id,
             raise_on_failure=self._options.raise_on_failure,
             typing=typing,
         )
 
     def prune(self) -> None:
         for scope, worker in list(self._workers.items()):
-            if worker.status == "stopping" and (
-                worker.task is None or worker.task.done()
-            ):
+            if not worker.is_alive:
                 self._workers.pop(scope, None)
 
     async def aclose(self) -> None:
@@ -102,8 +95,10 @@ class SenderRuntime:
                     if (error := task.exception()) is not None:
                         log.error("sender worker crashed", exc_info=error)
             for task in pending:
-                task.cancel()
-                with contextlib.suppress(asyncio.CancelledError, Exception):
-                    await task
+                _ = task.cancel()
+            for outcome in await asyncio.gather(*pending, return_exceptions=True):
+                if isinstance(outcome, BaseException) and not isinstance(
+                    outcome, asyncio.CancelledError
+                ):
+                    log.error("sender worker crashed", exc_info=outcome)
         self._workers.clear()
-        self._threads.clear()

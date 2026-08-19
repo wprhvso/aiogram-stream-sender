@@ -7,7 +7,7 @@ from aiogram import Bot
 
 from aiogram_stream_sender.chunk import Chunk
 from aiogram_stream_sender.errors import StreamFailedError
-from aiogram_stream_sender.runtime.worker import MachineWorker
+from aiogram_stream_sender.runtime.worker import MachineWorker, Outcome
 
 if TYPE_CHECKING:
     from aiogram_stream_sender.runtime.runtime import SenderRuntime
@@ -16,24 +16,24 @@ if TYPE_CHECKING:
 class LiveStream:
     def __init__(
         self,
-        runtime: "SenderRuntime",
         worker: MachineWorker,
         stream_id: int,
+        thread_id: int | None = None,
         *,
         raise_on_failure: bool,
         typing: bool = True,
     ) -> None:
-        self._runtime: Final = runtime
         self._worker: Final = worker
         self._stream_id: Final = stream_id
         self._raise_on_failure: Final = raise_on_failure
         _ = worker.register(
             stream_id,
-            runtime.thread_of(stream_id),
+            thread_id,
             typing=typing,
             context=contextvars.copy_context(),
         )
         self._closed = False
+        self._outcome: Outcome = ("ok", [], "")
 
     async def __aenter__(self) -> Self:
         return self
@@ -60,14 +60,13 @@ class LiveStream:
         should_raise = (
             self._raise_on_failure if raise_on_failure is None else raise_on_failure
         )
-        if self._closed:
-            status, message_ids, reason = self._worker.outcome(self._stream_id)
-            return message_ids
-        self._closed = True
-        self._worker.finalize(self._stream_id)
-        await self._worker.settled(self._stream_id)
-        status, message_ids, reason = self._worker.outcome(self._stream_id)
-        self._worker.unregister(self._stream_id)
+        if not self._closed:
+            self._closed = True
+            self._worker.finalize(self._stream_id)
+            await self._worker.settled(self._stream_id)
+            self._outcome = self._worker.outcome(self._stream_id)
+            self._worker.unregister(self._stream_id)
+        status, message_ids, reason = self._outcome
         if status == "failed" and should_raise:
             raise StreamFailedError(reason, message_ids)
         return message_ids

@@ -1,5 +1,5 @@
 import logging
-from typing import Final, Protocol
+from typing import Any, Final, Protocol
 
 from aiogram import Bot
 from aiogram.enums import ChatAction
@@ -28,9 +28,18 @@ class Executor(Protocol):
 
 
 def _entities(chunk: Chunk) -> list[MessageEntity] | None:
-    if chunk.parse_mode is not None:
+    if chunk.parse_mode is not None or not chunk.entities:
         return None
     return [MessageEntity.model_validate(entity) for entity in chunk.entities]
+
+
+def _formatting(chunk: Chunk) -> dict[str, Any]:
+    entities = _entities(chunk)
+    if entities is not None:
+        return {"entities": entities, "parse_mode": None}
+    if chunk.parse_mode is not None:
+        return {"parse_mode": chunk.parse_mode}
+    return {}
 
 
 def _markup(chunk: Chunk) -> InlineKeyboardMarkup | None:
@@ -81,11 +90,10 @@ class TelegramExecutor:
                 chat_id=self._chat_id,
                 message_thread_id=action.thread_id,
                 text=intent.chunk.text,
-                entities=_entities(intent.chunk),
-                parse_mode=intent.chunk.parse_mode,
                 reply_markup=_markup(intent.chunk),
                 link_preview_options=_preview(intent.chunk),
                 reply_parameters=_reply(intent.chunk),
+                **_formatting(intent.chunk),
             )
             return Result(ok=True, message_id=message.message_id)
 
@@ -94,10 +102,9 @@ class TelegramExecutor:
                 chat_id=self._chat_id,
                 message_id=intent.message_id,
                 text=intent.chunk.text,
-                entities=_entities(intent.chunk),
-                parse_mode=intent.chunk.parse_mode,
                 reply_markup=_markup(intent.chunk),
                 link_preview_options=_preview(intent.chunk),
+                **_formatting(intent.chunk),
             )
             return Result(ok=True, message_id=intent.message_id)
 

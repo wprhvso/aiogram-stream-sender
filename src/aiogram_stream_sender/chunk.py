@@ -28,9 +28,13 @@ class Chunk:
             ],
             ensure_ascii=False,
             sort_keys=True,
+            default=str,
         )
         digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
         object.__setattr__(self, "content_hash", digest)
+
+    def __hash__(self) -> int:
+        return hash((self.content_hash, self.key))
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> Self:

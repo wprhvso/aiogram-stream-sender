@@ -15,7 +15,7 @@ class MonotonicClock:
         return time.monotonic()
 
     async def sleep_until(self, deadline: float) -> None:
-        if math.isinf(deadline):
+        if deadline == math.inf:
             await asyncio.Event().wait()
             return
         delay = deadline - self.now()
