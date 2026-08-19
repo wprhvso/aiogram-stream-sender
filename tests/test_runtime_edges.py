@@ -60,8 +60,10 @@ async def test_thread_id_reaches_every_action(
     first.update([{"text": "a"}])
     second.update([{"text": "b"}])
     await asyncio.sleep(0)
-    await clock.advance(10.0)
-    _ = await asyncio.gather(first.finish(), second.finish())
+    pending = asyncio.gather(first.finish(), second.finish())
+    for _ in range(4):
+        await clock.advance(1.0)
+    _ = await asyncio.wait_for(pending, timeout=1.0)
 
     threads = {call.stream_id: call.thread_id for call in executor.calls}
     assert threads == {1: 3, 2: None}

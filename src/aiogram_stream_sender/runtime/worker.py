@@ -93,7 +93,6 @@ class MachineWorker:
             _ = await asyncio.wait({waiter, task}, return_when=asyncio.FIRST_COMPLETED)
         finally:
             _ = waiter.cancel()
-            _ = await asyncio.gather(waiter, return_exceptions=True)
 
         if not event.is_set():
             self._machine.kill(stream_id, "worker stopped")
@@ -189,4 +188,3 @@ class MachineWorker:
         finally:
             _ = sleeper.cancel()
             _ = waker.cancel()
-            _ = await asyncio.gather(sleeper, waker, return_exceptions=True)

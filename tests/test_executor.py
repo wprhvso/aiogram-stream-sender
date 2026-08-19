@@ -196,8 +196,8 @@ async def test_plain_chunk_leaves_the_extras_empty() -> None:
     assert kwargs["reply_markup"] is None
     assert kwargs["link_preview_options"] is None
     assert kwargs["reply_parameters"] is None
-    assert kwargs["parse_mode"] is None
-    assert kwargs["entities"] == []
+    assert "parse_mode" not in kwargs
+    assert "entities" not in kwargs
 
 
 async def test_parse_mode_replaces_entities() -> None:
@@ -213,7 +213,7 @@ async def test_parse_mode_replaces_entities() -> None:
 
     _name, kwargs = bot.calls[0]
     assert kwargs["parse_mode"] == "HTML"
-    assert kwargs["entities"] is None
+    assert "entities" not in kwargs
 
 
 async def test_edit_clears_a_markup_that_is_gone() -> None:

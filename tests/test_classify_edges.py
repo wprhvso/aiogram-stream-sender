@@ -1,4 +1,8 @@
-from aiogram.exceptions import TelegramNetworkError, TelegramServerError
+from aiogram.exceptions import (
+    TelegramBadRequest,
+    TelegramNetworkError,
+    TelegramServerError,
+)
 from aiogram.methods import SendMessage
 
 from aiogram_stream_sender.errors import Failure
@@ -25,8 +29,15 @@ def test_server_error_is_transient() -> None:
 
 
 def test_stream_markers_win_over_bad_request() -> None:
-    failure, _retry, _reason = classify(RuntimeError("topic_closed"))
+    failure, _retry, _reason = classify(
+        TelegramBadRequest(method=_method(), message="Bad Request: topic_closed")
+    )
     assert failure is Failure.STREAM_DEAD
+
+
+def test_stream_markers_are_ignored_outside_telegram_errors() -> None:
+    failure, _retry, _reason = classify(RuntimeError("topic_closed"))
+    assert failure is Failure.TRANSIENT
 
 
 def test_not_modified_requires_bad_request() -> None:
