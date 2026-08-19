@@ -37,9 +37,6 @@ class MachineWorker:
         self.task: asyncio.Task[None] | None = None
 
     def start(self) -> None:
-        # One worker serves a chat for the lifetime of the process. Inheriting
-        # the context of whichever caller opened the first stream would pin
-        # every later send in that chat to that one caller.
         self.task = asyncio.create_task(self.run(), context=contextvars.Context())
 
     def register(
@@ -66,12 +63,6 @@ class MachineWorker:
         return self._outcomes.get(stream_id) or self._machine.outcome(stream_id)
 
     async def settled(self, stream_id: int) -> None:
-        """Wait for a stream to settle, or for the worker to stop trying.
-
-        A worker that is cancelled before it ever runs cannot settle anyone, and
-        the event would never be set — so the death of the worker has to count
-        as an answer, otherwise the caller waits for the life of the process.
-        """
         event = self._waiters.get(stream_id)
         if event is None:
             return
@@ -106,9 +97,6 @@ class MachineWorker:
         self._wakeup.set()
 
     async def _execute(self, action: ScopedAction) -> Result:
-        # Run the call in the context of the stream it belongs to, so the work
-        # is attributed to the caller that asked for it rather than to the
-        # worker, which belongs to no caller in particular.
         context = self._contexts.get(action.stream_id)
         if context is None:
             return await self._executor.execute(action)
@@ -121,8 +109,6 @@ class MachineWorker:
             raise
 
     def _apply(self, action: ScopedAction, result: Result) -> None:
-        # Applying a result is what emits events, so it belongs to the stream
-        # just as much as the call itself does.
         context = self._contexts.get(action.stream_id)
         now = self._clock.now()
         if context is None:
@@ -154,8 +140,6 @@ class MachineWorker:
 
                 await self._sleep(deadline)
         except asyncio.CancelledError:
-            # Waiters block on finish() with no timeout, so leaving them unset
-            # strands the caller for good.
             self._machine.kill_all("worker cancelled")
             self._settle()
             self.status = "stopping"

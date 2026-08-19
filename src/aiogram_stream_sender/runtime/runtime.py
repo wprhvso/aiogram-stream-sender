@@ -98,8 +98,6 @@ class SenderRuntime:
                 tasks, timeout=self._options.shutdown_timeout
             )
             for task in done:
-                # asyncio.wait leaves results unretrieved, so a worker that
-                # crashed would only ever surface as a GC warning.
                 with contextlib.suppress(asyncio.CancelledError):
                     if (error := task.exception()) is not None:
                         log.error("sender worker crashed", exc_info=error)

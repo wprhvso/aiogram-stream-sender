@@ -17,8 +17,6 @@ origin: contextvars.ContextVar[str] = contextvars.ContextVar("origin", default="
 
 
 class ContextAwareExecutor(FakeExecutor):
-    """Records the context each Telegram call actually ran in."""
-
     def __init__(self) -> None:
         super().__init__()
         self.contexts: list[str] = []
@@ -60,9 +58,6 @@ async def test_telegram_calls_run_in_the_context_of_their_stream() -> None:
 
 
 async def test_a_second_turn_does_not_inherit_the_first() -> None:
-    # The worker is shared by the whole chat and outlives every stream, so
-    # without a per-stream context every send would report under whichever
-    # caller happened to open the worker.
     runtime, executor = build()
 
     async with asyncio.timeout(DEADLINE):
@@ -111,8 +106,6 @@ async def test_failed_actions_keep_the_exception_object() -> None:
 
 
 async def test_cancelling_the_worker_releases_a_waiting_finish() -> None:
-    # finish() waits on an event with no timeout, so a worker that dies without
-    # settling used to strand the caller for the life of the process.
     class Cancelling:
         async def execute(self, _action: ScopedAction) -> Result:
             raise asyncio.CancelledError

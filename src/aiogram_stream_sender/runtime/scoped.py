@@ -27,9 +27,6 @@ class LiveStream:
         self._worker: Final = worker
         self._stream_id: Final = stream_id
         self._raise_on_failure: Final = raise_on_failure
-        # Snapshot the opener: every send and edit for this stream happens later,
-        # inside a worker shared by the whole chat, and this is the only link
-        # back to whoever asked for it.
         _ = worker.register(
             stream_id,
             runtime.thread_of(stream_id),
