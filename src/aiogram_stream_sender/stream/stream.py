@@ -19,6 +19,7 @@ class SenderStream:
     is_final: bool = False
     state: StreamState = "active"
     reason: str | None = None
+    error: BaseException | None = None
 
     def update(self, chunks: Sequence[Chunk]) -> None:
         if self.is_final:
@@ -80,12 +81,13 @@ class SenderStream:
         self.messages[index].on_failure(terminal=terminal)
         self._refresh()
 
-    def kill(self, reason: str) -> None:
+    def kill(self, reason: str, error: BaseException | None = None) -> None:
         for message in self.messages:
             if message.state != "dead":
                 message.state = "dead"
         self.state = "dead"
         self.reason = reason
+        self.error = error
 
     def _refresh(self) -> None:
         if self.state != "active":

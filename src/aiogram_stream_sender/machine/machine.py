@@ -133,11 +133,15 @@ class SenderMachine:
             return
 
         if result.failure is Failure.STREAM_DEAD:
-            stream.kill(result.reason)
+            stream.kill(result.reason, result.error)
             emit(
                 self._sink,
                 StreamFailed(
-                    self.bot_id, self.chat_id, action.stream_id, result.reason
+                    self.bot_id,
+                    self.chat_id,
+                    action.stream_id,
+                    result.reason,
+                    result.error,
                 ),
             )
             self._note_done(stream, now)
@@ -154,6 +158,7 @@ class SenderMachine:
                     action.stream_id,
                     action.index,
                     result.reason,
+                    result.error,
                 ),
             )
             self._note_done(stream, now)
@@ -162,11 +167,15 @@ class SenderMachine:
         stream.apply_failure(action.index, terminal=False)
         attempts = stream.attempts_at(action.index)
         if attempts >= self._options.max_attempts:
-            stream.kill(result.reason or "max attempts exceeded")
+            stream.kill(result.reason or "max attempts exceeded", result.error)
             emit(
                 self._sink,
                 StreamFailed(
-                    self.bot_id, self.chat_id, action.stream_id, stream.reason or ""
+                    self.bot_id,
+                    self.chat_id,
+                    action.stream_id,
+                    stream.reason or "",
+                    stream.error,
                 ),
             )
             self._note_done(stream, now)

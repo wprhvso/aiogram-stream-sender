@@ -12,6 +12,10 @@ class MessageFailed:
     stream_id: int
     index: int
     reason: str
+    # The exception itself, where there was one. Result carries it for exactly
+    # this reason: a string cannot be written into a trace with a stack trace
+    # behind it, and the sink is the only place that could write one.
+    error: BaseException | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +24,7 @@ class StreamFailed:
     chat_id: int
     stream_id: int
     reason: str
+    error: BaseException | None = None
 
 
 @dataclass(frozen=True, slots=True)

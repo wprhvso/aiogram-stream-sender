@@ -151,3 +151,86 @@ def test_sweep_evicts_finished_stream_and_machine() -> None:
     assert not machine.is_evictable(6.0)
     machine.sweep(20.0)
     assert machine.is_evictable(20.0)
+
+
+def test_a_dead_message_hands_over_the_exception(options: Options) -> None:
+    events: list[Event] = []
+    machine = _machine(options, events)
+    machine.add_stream(1, None)
+    machine.update(1, [Chunk(text="a")])
+    action, _deadline = machine.plan(0.0)
+    assert action is not None
+    boom = ValueError("can't parse entities")
+
+    machine.apply(
+        action,
+        Result(
+            ok=False, failure=Failure.MESSAGE_DEAD, reason="can't parse", error=boom
+        ),
+        0.0,
+    )
+
+    failed = next(event for event in events if isinstance(event, MessageFailed))
+    # The sink is the only place that can write this into a trace, and a
+    # reason string has no stack trace behind it.
+    assert failed.error is boom
+
+
+def test_a_dead_stream_hands_over_the_exception(options: Options) -> None:
+    events: list[Event] = []
+    machine = _machine(options, events)
+    machine.add_stream(1, None)
+    machine.update(1, [Chunk(text="a")])
+    action, _deadline = machine.plan(0.0)
+    assert action is not None
+    boom = PermissionError("bot was blocked by the user")
+
+    machine.apply(
+        action,
+        Result(ok=False, failure=Failure.STREAM_DEAD, reason="blocked", error=boom),
+        0.0,
+    )
+
+    failed = next(event for event in events if isinstance(event, StreamFailed))
+    assert failed.error is boom
+
+
+def test_giving_up_after_max_attempts_reports_the_last_exception() -> None:
+    events: list[Event] = []
+    tight = Options(
+        backoff_jitter=0.0, typing_enabled=False, max_attempts=2, send_interval=0.0
+    )
+    machine = _machine(tight, events)
+    machine.add_stream(1, None)
+    machine.update(1, [Chunk(text="a")])
+    now = 0.0
+    boom = TimeoutError("telegram timed out")
+    for _ in range(2):
+        action, _deadline = machine.plan(now)
+        assert action is not None
+        machine.apply(
+            action, Result(ok=False, failure=Failure.TRANSIENT, error=boom), now
+        )
+        now += 100.0
+
+    failed = next(event for event in events if isinstance(event, StreamFailed))
+    assert failed.error is boom
+
+
+def test_a_failure_with_no_exception_still_reports_nothing_odd(
+    options: Options,
+) -> None:
+    events: list[Event] = []
+    machine = _machine(options, events)
+    machine.add_stream(1, None)
+    machine.update(1, [Chunk(text="a")])
+    action, _deadline = machine.plan(0.0)
+    assert action is not None
+
+    machine.apply(
+        action, Result(ok=False, failure=Failure.MESSAGE_DEAD, reason="gone"), 0.0
+    )
+
+    failed = next(event for event in events if isinstance(event, MessageFailed))
+    assert failed.error is None
+    assert failed.reason == "gone"
